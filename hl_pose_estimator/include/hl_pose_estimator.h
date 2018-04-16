@@ -1,5 +1,7 @@
 #ifndef _HL_POSE_ESTIMATOR_
 #define _HL_POSE_ESTIMATOR_
+#include "ros/ros.h"
+
 
 class hl_pose_estimator
 {

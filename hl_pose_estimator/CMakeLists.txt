@@ -8,6 +8,9 @@ project(hl_pose_estimator)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  rospy
+  std_msgs
   geometry_msgs
 )
 
@@ -114,7 +117,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -195,3 +198,9 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+add_executable(hl_pose_estimator_node 
+               src/hl_pose_estimator_node.cpp
+               src/hl_pose_estimator.cpp)
+target_link_libraries(hl_pose_estimator_node
+   ${catkin_LIBRARIES}
+ )
