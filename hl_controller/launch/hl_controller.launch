@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+
+  <node pkg="hl_controller" type="hl_controller_node" name="hl_controller" output="screen"/>
+
+  <include file="$(find apriltags2_ros)/launch/continuous_detection.launch"/>
+
+</launch>
