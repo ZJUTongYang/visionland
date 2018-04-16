@@ -17,7 +17,8 @@ public:
 
   
   ros::Subscriber tag_detection_sub;
-  ros::Subscriber ground_truth_sub;
+  //YT get the robot pose (from ground_truth or pose_estimator)
+  ros::Subscriber robot_pose_sub;
   ros::Subscriber mode_change_sub;
   ros::Publisher pose_pub;
   ros::Publisher cmd_vel_pub;

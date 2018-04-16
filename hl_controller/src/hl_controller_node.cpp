@@ -13,7 +13,7 @@
 
 int main(int argc,char **argv)
 {
-   ros::init(argc, argv, "pose_pub");
+   ros::init(argc, argv, "hl_controller");
 //   ros::NodeHandle n;
 //   ros::Subscriber tag_detections_sub;
 //   ros::Publisher pose_pub;

@@ -11,7 +11,7 @@
 hl_controller::hl_controller()
 {
   tag_detection_sub = n.subscribe("/tag_detections", 1, &hl_controller::tag_detections_Callback, this);
-  ground_truth_sub = n.subscribe("/ground_truth_to_tf/pose", 1, &hl_controller::ground_truth_Callback, this);
+  robot_pose_sub = n.subscribe("/ground_truth_to_tf/pose", 1, &hl_controller::ground_truth_Callback, this);
   mode_change_sub = n.subscribe("/hl_change_mode", 1, &hl_controller::mode_change_Callback, this);
     pose_pub = n.advertise<geometry_msgs::PoseStamped>("/command/pose", 1);
     cmd_vel_pub = n.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
