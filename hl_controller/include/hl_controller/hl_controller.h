@@ -7,6 +7,7 @@
 #include "hl_controller/hl_constants.h"
 #include "hl_controller/hl_helper.h"
 #include "nav_msgs/Path.h"
+#include "nav_msgs/Odometry.h"
 
 class hl_controller
 {
