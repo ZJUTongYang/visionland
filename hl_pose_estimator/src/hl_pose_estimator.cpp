@@ -19,6 +19,8 @@ hl_pose_estimator::~hl_pose_estimator()
 
 void hl_pose_estimator::ground_truth_Callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
+  current_pose.header.stamp = ros::Time::now();
+  current_pose.header.frame_id = "world";
   current_pose.pose.position.x = msg->pose.position.x;
   current_pose.pose.position.y = msg->pose.position.y;
   current_pose.pose.position.z = msg->pose.position.z;

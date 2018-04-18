@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   apriltags2_ros
   geometry_msgs
   hector_uav_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions

@@ -8,6 +8,8 @@
 #include "hl_controller/hl_helper.h"
 #include "nav_msgs/Path.h"
 #include "nav_msgs/Odometry.h"
+#include "tf/transform_listener.h"
+
 
 class hl_controller
 {
@@ -31,7 +33,7 @@ public:
   void mode_change_Callback(const std_msgs::String::ConstPtr& msg);
   void executeCB();
   void setspeed(double vx, double vy, double vz);
-  void set_velocity(geometry_msgs::PoseStamped subgoal);
+  void set_velocity(geometry_msgs::PoseStamped& subgoal);
 
 
 private:
@@ -39,11 +41,14 @@ private:
 
   hl_helper hl_helper_;
   hl_constants hl_constants_;
+  tf::TransformListener transform_listener_;
+  tf::StampedTransform target_in_robot_frame_transform;
   std::string mode;
   geometry_msgs::PoseStamped current_pose_in_world_frame;
   geometry_msgs::PoseStamped current_pose_in_target_frame;
-  geometry_msgs::PoseStamped target_in_robot_frame;
+  geometry_msgs::PoseStamped target_in_robot_frame;//YT will be replaced by tf_transform
   nav_msgs::Path current_path;
+  ros::Time last_time_get_tag_detections;
 };
 
 
