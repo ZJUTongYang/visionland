@@ -116,10 +116,10 @@ void hl_controller::tag_detections_Callback(const apriltags2_ros::AprilTagDetect
     target_in_robot_frame.pose.position.y = -current_pose_in_target_frame.pose.position.y;
     target_in_robot_frame.pose.position.z = -current_pose_in_target_frame.pose.position.z;
     //YT currently we do not introduce angles
-    target_in_robot_frame.pose.orientation.x = 0;
-    target_in_robot_frame.pose.orientation.y = 0;
-    target_in_robot_frame.pose.orientation.z = 0;
-    target_in_robot_frame.pose.orientation.w = 1;
+    target_in_robot_frame.pose.orientation.x = -current_pose_in_target_frame.pose.orientation.x;
+    target_in_robot_frame.pose.orientation.y = -current_pose_in_target_frame.pose.orientation.y;
+    target_in_robot_frame.pose.orientation.z = -current_pose_in_target_frame.pose.orientation.z;
+    target_in_robot_frame.pose.orientation.w = current_pose_in_target_frame.pose.orientation.w;
 }
 
 void hl_controller::set_velocity(geometry_msgs::PoseStamped goal)
