@@ -3,6 +3,7 @@
 #include "ros/time.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/TwistStamped.h"
 #include "apriltags2_ros/AprilTagDetectionArray.h"
 #include "hl_controller/hl_controller.h"
 #include "hector_uav_msgs/EnableMotors.h"
@@ -10,17 +11,29 @@
 #include "nav_msgs/Path.h"
 #include "nav_msgs/Odometry.h"
 #include "tf/transform_listener.h"
+#include "mavros_msgs/State.h"
+#include "mavros_msgs/SetMode.h"
+#include "mavros_msgs/CommandBool.h"
+
 
 hl_controller::hl_controller()
 {
+    state_sub = n.subscribe("mavros/state", 1, &hl_controller::state_Callback, this);
+    local_pos_sub = n.subscribe("mavros/local_position/pose", 1, &hl_controller::robot_pose_Callback, this);
+    local_pos_pub = n.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 1);
+
+
     tag_detection_sub = n.subscribe("/tag_detections", 1, &hl_controller::tag_detections_Callback, this);
-    robot_pose_sub = n.subscribe("/hl_estimated_pose", 1, &hl_controller::robot_pose_Callback, this);
+//    robot_pose_sub = n.subscribe("/hl_estimated_pose", 1, &hl_controller::robot_pose_Callback, this);
     mode_change_sub = n.subscribe("/hl_change_mode", 1, &hl_controller::mode_change_Callback, this);
-//    pose_pub = n.advertise<geometry_msgs::PoseStamped>("/command/pose", 1);
-    cmd_vel_pub = n.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+    cmd_vel_pub = n.advertise<geometry_msgs::TwistStamped>("mavros/setpoint_velocity/cmd_vel", 1);
     path_pub = n.advertise<nav_msgs::Path>("/hl_global_path", 1);
 
     client = n.serviceClient<hector_uav_msgs::EnableMotors>("/enable_motors");
+    arming_client = n.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
+    set_mode_client = n.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+
+
 
     mode = "takeoff";
 
@@ -70,17 +83,99 @@ hl_controller::~hl_controller()
 //YT before init motors we need some time to wait for other ROS module
 void hl_controller::init_motors()
 {
-  ros::Time t0 = ros::Time::now();
-  while(1)
-  {
-    ros::Time t1 = ros::Time::now();
-    ros::Duration d(t1 - t0);
-    if(d.toSec() > 1)
-      break;
-  }
-  hector_uav_msgs::EnableMotors srv;
-  srv.request.enable = true;
-  client.call(srv);
+
+    //YT for hector, enabling motors
+    ros::Time t0 = ros::Time::now();
+    while(1)
+    {
+        ros::Time t1 = ros::Time::now();
+        ros::Duration d(t1 - t0);
+        if(d.toSec() > 1)
+            break;
+    }
+    hector_uav_msgs::EnableMotors srv;
+    srv.request.enable = true;
+    client.call(srv);
+
+    //ZYX for pixhawk, waiting for FCU connection
+    ros::Rate rate(20.0);
+    while(ros::ok() && current_state.connected)
+    {
+        ros::spinOnce();
+        rate.sleep();
+    }
+
+    double origin_x = 0, origin_y = 0, origin_z = 0;
+
+    //send a few setpoints before starting
+    for(unsigned int i = 0;i < 100;i++)
+    {
+   
+        geometry_msgs::PoseStamped temp;
+        temp.pose.position.x = 0;
+        temp.pose.position.y = 0;
+        temp.pose.position.z = 5;
+//        temp.pose.orientation.x = 0;
+//        temp.pose.orientation.y = 0;
+//        temp.pose.orientation.z = 0;
+//        temp.pose.orientation.w = 1;
+        local_pos_pub.publish(temp);
+	ROS_INFO("Position Control before");
+        ros::spinOnce();
+        rate.sleep();
+    }
+
+
+    mavros_msgs::SetMode offb_set_mode;
+    mavros_msgs::SetMode offb_set_mode1;
+    offb_set_mode.request.custom_mode = "OFFBOARD";
+    offb_set_mode1.request.custom_mode = "AUTO.LAND";
+
+    mavros_msgs::CommandBool arm_cmd;
+    arm_cmd.request.value = true;
+
+    
+    ros::Time last_request = ros::Time::now();
+
+    //YT make sure current_state.mode is "OFFBOARD" and current_state.armed is "true"
+    while(ros::ok()){
+        bool arm_flag = 0;
+        if( current_state.mode != "OFFBOARD" &&
+            (ros::Time::now() - last_request > ros::Duration(5.0))){
+            if( set_mode_client.call(offb_set_mode) &&
+                offb_set_mode.response.mode_sent){        //(indigo)mode_sent-->success
+                ROS_INFO("Offboard enabled");
+            }
+            last_request = ros::Time::now();
+        } else {
+            if( !current_state.armed &&
+                (ros::Time::now() - last_request > ros::Duration(5.0))){
+                if( arming_client.call(arm_cmd) &&
+                    arm_cmd.response.success){
+                    ROS_INFO("Vehicle armed");
+                    arm_flag = 1;
+                }
+                last_request = ros::Time::now();
+            }
+        }
+
+        geometry_msgs::PoseStamped temp;
+        temp.pose.position.x = 0;
+        temp.pose.position.y = 0;
+        temp.pose.position.z = 10;
+//        temp.pose.orientation.x = 0;
+//        temp.pose.orientation.y = 0;
+//        temp.pose.orientation.z = 0;
+//        temp.pose.orientation.w = 1;
+        local_pos_pub.publish(temp);
+
+
+	ros::spinOnce();
+	rate.sleep();
+        if(arm_flag ==1)
+            break;
+    }
+    std::cout << "YT: enabled hector & pixhawk ! " <<  std::endl;
 }
 
 void hl_controller::executeCB()
@@ -96,20 +191,29 @@ void hl_controller::executeCB()
 
     if(mode == "takeoff")
     {
-        geometry_msgs::Twist cmd_vel;
-        cmd_vel.linear.z = 1;
-        cmd_vel_pub.publish(cmd_vel);
+
+        //YT for pixhawk
+        geometry_msgs::PoseStamped temp;
+        temp.pose.position.x = 0;
+        temp.pose.position.y = 0;
+        temp.pose.position.z = 10;
+//        temp.pose.orientation.x = 0;
+//        temp.pose.orientation.y = 0;
+//        temp.pose.orientation.z = 0;
+//        temp.pose.orientation.w = 1;
+        local_pos_pub.publish(temp);
+	ROS_INFO("Position Control 10m");
     }
     if(mode == "stabilized")
     {
-        geometry_msgs::Twist cmd_vel;
-        cmd_vel.linear.x = 0;
-        cmd_vel.linear.y = 0;
-        cmd_vel.linear.z = 0;
-        cmd_vel.angular.x = 0;
-        cmd_vel.angular.y = 0;
-        cmd_vel.angular.z = 0;
-        cmd_vel_pub.publish(cmd_vel);
+        geometry_msgs::TwistStamped cmd_vel_stamped;
+        cmd_vel_stamped.twist.linear.x = 0;
+        cmd_vel_stamped.twist.linear.y = 0;
+        cmd_vel_stamped.twist.linear.z = 0;
+        cmd_vel_stamped.twist.angular.x = 0;
+        cmd_vel_stamped.twist.angular.y = 0;
+        cmd_vel_stamped.twist.angular.z = 0;
+        cmd_vel_pub.publish(cmd_vel_stamped);
     }
     if(mode == "tracking")
     {
@@ -120,10 +224,11 @@ void hl_controller::executeCB()
 
     if(mode == "landing")
     {
-        geometry_msgs::Twist cmd_vel;
-        cmd_vel.linear.z = -hl_constants_.getMAXV();
-        cmd_vel_pub.publish(cmd_vel);
+        geometry_msgs::TwistStamped cmd_vel_stamped;
+        cmd_vel_stamped.twist.linear.z = -hl_constants_.getMAXV();
+        cmd_vel_pub.publish(cmd_vel_stamped);
     }      
+    ros::Duration(0.1).sleep();
 }
 
 void hl_controller::tag_detections_Callback(const apriltags2_ros::AprilTagDetectionArray::ConstPtr& msg)
@@ -157,17 +262,17 @@ void hl_controller::set_velocity(geometry_msgs::PoseStamped& goal)
     scale_factor = sqrt(goal.pose.position.x * goal.pose.position.x + 
                         goal.pose.position.y * goal.pose.position.y + 
                         goal.pose.position.z * goal.pose.position.z);
-    geometry_msgs::Twist cmd_vel;
+    geometry_msgs::TwistStamped cmd_vel_stamped;
 
-    cmd_vel.linear.x = hl_constants_.getMAXV() * goal.pose.position.x / scale_factor;
-    cmd_vel.linear.y = hl_constants_.getMAXV() * goal.pose.position.y / scale_factor;
+    cmd_vel_stamped.twist.linear.x = hl_constants_.getMAXV() * goal.pose.position.x / scale_factor;
+    cmd_vel_stamped.twist.linear.y = hl_constants_.getMAXV() * goal.pose.position.y / scale_factor;
 //    cmd_vel.linear.z = 0;
-    cmd_vel.linear.z = hl_constants_.getMAXV() * goal.pose.position.z / scale_factor;
-    cmd_vel.angular.x = 0;
-    cmd_vel.angular.y = 0;
-    cmd_vel.angular.z = 0;
-    std::cout << "YT: cmd_vel = [" << cmd_vel.linear.x << ", " << cmd_vel.linear.y << ", " << cmd_vel.linear.z << "]"<< std::endl;
-    cmd_vel_pub.publish(cmd_vel);
+    cmd_vel_stamped.twist.linear.z = hl_constants_.getMAXV() * goal.pose.position.z / scale_factor;
+    cmd_vel_stamped.twist.angular.x = 0;
+    cmd_vel_stamped.twist.angular.y = 0;
+    cmd_vel_stamped.twist.angular.z = 0;
+    std::cout << "YT: cmd_vel = [" << cmd_vel_stamped.twist.linear.x << ", " << cmd_vel_stamped.twist.linear.y << ", " << cmd_vel_stamped.twist.linear.z << "]"<< std::endl;
+    cmd_vel_pub.publish(cmd_vel_stamped);
     goal.pose.position.z -= 2;
 }
 
@@ -188,4 +293,10 @@ void hl_controller::mode_change_Callback(const std_msgs::String::ConstPtr& msg)
     std::cout << "YT: receive new flight mode" << std::endl;
     mode = msg->data;
 }
+
+void hl_controller::state_Callback(const mavros_msgs::State::ConstPtr& msg)
+{
+    current_state = *msg;
+}
+
 

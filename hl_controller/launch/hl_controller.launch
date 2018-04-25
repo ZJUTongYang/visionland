@@ -3,6 +3,7 @@
 
   <node pkg="hl_controller" type="hl_controller_node" name="hl_controller" output="screen"/>
 
+  <node pkg="rviz" type="rviz" name="rviz"/>
 
   <!-- YT enable finding the apriltags -->
   <include file="$(find apriltags2_ros)/launch/continuous_detection.launch"/>
