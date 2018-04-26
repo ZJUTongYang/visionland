@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<launch>
+
+  <node pkg="hl_controller" type="hl_controller_node" name="hl_controller" output="screen"/>
+
+
+  <!-- YT enable finding the apriltags -->
+  <include file="$(find apriltags2_ros)/launch/continuous_detection.launch"/>
+
+
+  <!-- YT enable pose_estimator -->
+  <include file="$(find hl_pose_estimator)/launch/hl_pose_estimator.launch"/>
+</launch>
