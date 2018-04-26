@@ -5,7 +5,8 @@ code based on ubuntu 16.04 & ros kinetic & Hector quadrotor project.
 # Usage
 ## 1. Download apriltags2_ros and Hector_quadrotor from github<br>
 
-## 2. Change camera in hector model into downward orientation<br>
+## 2. Modify the model
+Change camera in hector model into downward orientation<br>
 
 ## 3. build all projects<br>
 (1) Put all packages (apriltags2_ros & hector_quadrotor & hl_controller) into ~/catkin_ws/src.<br>
