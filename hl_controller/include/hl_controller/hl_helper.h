@@ -8,7 +8,7 @@ class hl_helper
 public:
   hl_helper();
   ~hl_helper();
-  void cout_PoseStamped(const geometry_msgs::PoseStamped pose);
+  void cout_PoseStamped(const std::string foreword, const geometry_msgs::PoseStamped& pose, bool show_pos = true, bool show_quaternion = false);
 
 };
 #endif
