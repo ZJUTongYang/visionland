@@ -14,6 +14,6 @@ Change camera in hector model into downward orientation<br>
 (3) source ~/catkin_ws/devel/setup.bash <br>
 
 ## 4. Run <br>
-(1) roslaunch hector_quadrotor_demo hl.launch
-(2) roslaunch hl_controller hl_controller.launch
-(3) rostopic pub -r 10 /hl_change_mode std_msgs/String "data: 'tracking'" 
+(1) roslaunch hector_quadrotor_demo hl.launch<br>
+(2) roslaunch hl_controller hl_controller.launch<br>
+(3) rostopic pub -r 10 /hl_change_mode std_msgs/String "data: 'tracking'" <br>
