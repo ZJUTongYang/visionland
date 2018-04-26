@@ -2,7 +2,7 @@
 
 hl_constants::hl_constants()
 {
-    max_v = 0.3;
+    max_v = 0.5;
 }
 
 hl_constants::~hl_constants()

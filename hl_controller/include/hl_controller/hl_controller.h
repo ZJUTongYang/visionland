@@ -10,13 +10,18 @@
 #include "nav_msgs/Odometry.h"
 #include "tf/transform_listener.h"
 #include "mavros_msgs/State.h"
+#include "mavros_msgs/ExtendedState.h"
+
+
+#define VTOL_STATE_MC 3
+
 
 class hl_controller
 {
 
 public:
   hl_controller();
-  ~hl_controller();
+  ~hl_controller(){}
   void init_motors();
 
   
@@ -25,25 +30,23 @@ public:
   ros::Subscriber state_sub;
   ros::Subscriber local_pos_sub;
 
-
-
-  ros::Subscriber robot_pose_sub;
   ros::Subscriber mode_change_sub;
   ros::Publisher local_pos_pub;
   ros::Publisher cmd_vel_pub;
-  ros::Publisher path_pub;
+
   ros::ServiceClient client;
   ros::ServiceClient arming_client;
   ros::ServiceClient set_mode_client;
 
   void state_Callback(const mavros_msgs::State::ConstPtr& msg);
   void tag_detections_Callback(const apriltags2_ros::AprilTagDetectionArray::ConstPtr& msg);
-  void robot_pose_Callback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+  void local_pos_Callback(const geometry_msgs::PoseStamped::ConstPtr& msg);
   void mode_change_Callback(const std_msgs::String::ConstPtr& msg);
   void executeCB();
   void setspeed(double vx, double vy, double vz);
   void set_velocity(geometry_msgs::PoseStamped& subgoal);
-
+  
+    void enable_offboard();
 
 private:
   ros::NodeHandle n;
@@ -52,7 +55,7 @@ private:
   hl_constants hl_constants_;
   tf::TransformListener transform_listener_;
   tf::StampedTransform target_in_robot_frame_transform;
-  std::string mode;
+  std::string hl_mode;
   geometry_msgs::PoseStamped current_pose_in_world_frame;
   geometry_msgs::PoseStamped current_pose_in_target_frame;
   geometry_msgs::PoseStamped target_in_robot_frame;//YT will be replaced by tf_transform
@@ -60,7 +63,7 @@ private:
   ros::Time last_time_get_tag_detections;
 
     //ZYX for pixhawk
-    mavros_msgs::State current_state;
+    mavros_msgs::State px4_state;
     geometry_msgs::PoseStamped current_position;
 
 };

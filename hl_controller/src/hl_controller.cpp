@@ -19,23 +19,19 @@
 hl_controller::hl_controller()
 {
     state_sub = n.subscribe("mavros/state", 1, &hl_controller::state_Callback, this);
-    local_pos_sub = n.subscribe("mavros/local_position/pose", 1, &hl_controller::robot_pose_Callback, this);
+    local_pos_sub = n.subscribe("mavros/local_position/pose", 1, &hl_controller::local_pos_Callback, this);
     local_pos_pub = n.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 1);
 
-
     tag_detection_sub = n.subscribe("/tag_detections", 1, &hl_controller::tag_detections_Callback, this);
-//    robot_pose_sub = n.subscribe("/hl_estimated_pose", 1, &hl_controller::robot_pose_Callback, this);
     mode_change_sub = n.subscribe("/hl_change_mode", 1, &hl_controller::mode_change_Callback, this);
     cmd_vel_pub = n.advertise<geometry_msgs::TwistStamped>("mavros/setpoint_velocity/cmd_vel", 1);
-    path_pub = n.advertise<nav_msgs::Path>("/hl_global_path", 1);
 
     client = n.serviceClient<hector_uav_msgs::EnableMotors>("/enable_motors");
     arming_client = n.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
     set_mode_client = n.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
 
 
-
-    mode = "takeoff";
+    hl_mode = "waiting";
 
     init_motors();
   
@@ -45,10 +41,10 @@ hl_controller::hl_controller()
 
         executeCB();   
         
-        if((mode == "takeoff")&&(current_pose_in_world_frame.pose.position.z > 10))
-            mode = "stabilized";//YT cannot convert to tracking directly
+        if((hl_mode == "takeoff")&&(current_pose_in_world_frame.pose.position.z > 5))
+            hl_mode = "stabilized";//YT cannot convert to tracking directly
 
-        if((mode =="tracking") &&
+        if((hl_mode =="tracking") &&
            (fabs(target_in_robot_frame.pose.position.x) < 0.1)&&
            (fabs(target_in_robot_frame.pose.position.y) < 0.1)&&
            (current_pose_in_world_frame.pose.position.z < 3))
@@ -61,14 +57,24 @@ hl_controller::hl_controller()
                       << target_in_robot_frame.pose.position.z
                       << "] " << std::endl;
 
-            mode = "landing";
+            hl_mode = "landing";
         }
+        
+
+
 
         ros::Time t = ros::Time::now();
         ros::Duration d(t - last_time_get_tag_detections);
-        if((mode == "tracking")&&(d.toSec() > 0.5))
+
+        if((hl_mode == "waiting") && (d.toSec() < 0.4))
         {
-            mode = "landing";
+            enable_offboard();    
+	    hl_mode = "tracking";
+        }
+
+        if((hl_mode == "tracking")&&(d.toSec() > 0.5))
+        {
+            hl_mode = "landing";
         }
 
         ros::spinOnce();
@@ -76,30 +82,12 @@ hl_controller::hl_controller()
     }
 }
 
-hl_controller::~hl_controller()
-{
-}
-
 //YT before init motors we need some time to wait for other ROS module
 void hl_controller::init_motors()
 {
-
-    //YT for hector, enabling motors
-    ros::Time t0 = ros::Time::now();
-    while(1)
-    {
-        ros::Time t1 = ros::Time::now();
-        ros::Duration d(t1 - t0);
-        if(d.toSec() > 1)
-            break;
-    }
-    hector_uav_msgs::EnableMotors srv;
-    srv.request.enable = true;
-    client.call(srv);
-
-    //ZYX for pixhawk, waiting for FCU connection
+    //for pixhawk, waiting for FCU connection
     ros::Rate rate(20.0);
-    while(ros::ok() && current_state.connected)
+    while(ros::ok() && px4_state.connected)
     {
         ros::spinOnce();
         rate.sleep();
@@ -107,40 +95,24 @@ void hl_controller::init_motors()
 
     double origin_x = 0, origin_y = 0, origin_z = 0;
 
-    //send a few setpoints before starting
-    for(unsigned int i = 0;i < 100;i++)
-    {
-   
-        geometry_msgs::PoseStamped temp;
-        temp.pose.position.x = 0;
-        temp.pose.position.y = 0;
-        temp.pose.position.z = 5;
-//        temp.pose.orientation.x = 0;
-//        temp.pose.orientation.y = 0;
-//        temp.pose.orientation.z = 0;
-//        temp.pose.orientation.w = 1;
-        local_pos_pub.publish(temp);
-	ROS_INFO("Position Control before");
-        ros::spinOnce();
-        rate.sleep();
-    }
 
+    std::cout << "YT: enabled pixhawk ! " <<  std::endl;
+}
 
+void hl_controller::enable_offboard()
+{
+    ros::Rate rate(20.0);
     mavros_msgs::SetMode offb_set_mode;
-    mavros_msgs::SetMode offb_set_mode1;
     offb_set_mode.request.custom_mode = "OFFBOARD";
-    offb_set_mode1.request.custom_mode = "AUTO.LAND";
-
     mavros_msgs::CommandBool arm_cmd;
     arm_cmd.request.value = true;
 
-    
-    ros::Time last_request = ros::Time::now();
 
-    //YT make sure current_state.mode is "OFFBOARD" and current_state.armed is "true"
+    ros::Time last_request = ros::Time::now();
+     //YT make sure px4_state.mode is "OFFBOARD" and px4_state.armed is "true"
     while(ros::ok()){
         bool arm_flag = 0;
-        if( current_state.mode != "OFFBOARD" &&
+        if( px4_state.mode != "OFFBOARD" &&
             (ros::Time::now() - last_request > ros::Duration(5.0))){
             if( set_mode_client.call(offb_set_mode) &&
                 offb_set_mode.response.mode_sent){        //(indigo)mode_sent-->success
@@ -148,7 +120,7 @@ void hl_controller::init_motors()
             }
             last_request = ros::Time::now();
         } else {
-            if( !current_state.armed &&
+            if( !px4_state.armed &&
                 (ros::Time::now() - last_request > ros::Duration(5.0))){
                 if( arming_client.call(arm_cmd) &&
                     arm_cmd.response.success){
@@ -160,9 +132,9 @@ void hl_controller::init_motors()
         }
 
         geometry_msgs::PoseStamped temp;
-        temp.pose.position.x = 0;
-        temp.pose.position.y = 0;
-        temp.pose.position.z = 10;
+        temp.pose.position.x = current_pose_in_world_frame.pose.position.x;
+        temp.pose.position.y = current_pose_in_world_frame.pose.position.y;
+        temp.pose.position.z = current_pose_in_world_frame.pose.position.z;
 //        temp.pose.orientation.x = 0;
 //        temp.pose.orientation.y = 0;
 //        temp.pose.orientation.z = 0;
@@ -175,36 +147,23 @@ void hl_controller::init_motors()
         if(arm_flag ==1)
             break;
     }
-    std::cout << "YT: enabled hector & pixhawk ! " <<  std::endl;
+    std::cout << "YT: set pixhawk to offboard mode!" << std::endl;
 }
+
 
 void hl_controller::executeCB()
 {
-    std::cout << "YT:mode = " << mode 
-              << ", target: [" 
-              << target_in_robot_frame.pose.position.x
-              << ", "
-              << target_in_robot_frame.pose.position.y
-              << ", "
-              << target_in_robot_frame.pose.position.z
-              << "]" << std::endl;
+    std::cout << "YT: hl_mode = " << hl_mode << ", ";
+    hl_helper_.cout_PoseStamped("target", target_in_robot_frame, true, false);
 
-    if(mode == "takeoff")
+    if(hl_mode == "takeoff")
     {
 
         //YT for pixhawk
-        geometry_msgs::PoseStamped temp;
-        temp.pose.position.x = 0;
-        temp.pose.position.y = 0;
-        temp.pose.position.z = 10;
-//        temp.pose.orientation.x = 0;
-//        temp.pose.orientation.y = 0;
-//        temp.pose.orientation.z = 0;
-//        temp.pose.orientation.w = 1;
-        local_pos_pub.publish(temp);
-	ROS_INFO("Position Control 10m");
+        local_pos_pub.publish(hl_helper_.new_PoseStamped_no_header(0, 0, 5, 0, 0, 0, 1));
+	ROS_INFO("Position Control 5m");
     }
-    if(mode == "stabilized")
+    if(hl_mode == "stabilized")
     {
         geometry_msgs::TwistStamped cmd_vel_stamped;
         cmd_vel_stamped.twist.linear.x = 0;
@@ -215,18 +174,19 @@ void hl_controller::executeCB()
         cmd_vel_stamped.twist.angular.z = 0;
         cmd_vel_pub.publish(cmd_vel_stamped);
     }
-    if(mode == "tracking")
+    if(hl_mode == "tracking")
     {
         //YT we want to stop at 2m above the target place
 
         set_velocity(target_in_robot_frame);
     }
 
-    if(mode == "landing")
+    if(hl_mode == "landing")
     {
         geometry_msgs::TwistStamped cmd_vel_stamped;
         cmd_vel_stamped.twist.linear.z = -hl_constants_.getMAXV();
         cmd_vel_pub.publish(cmd_vel_stamped);
+
     }      
     ros::Duration(0.1).sleep();
 }
@@ -266,7 +226,6 @@ void hl_controller::set_velocity(geometry_msgs::PoseStamped& goal)
 
     cmd_vel_stamped.twist.linear.x = hl_constants_.getMAXV() * goal.pose.position.x / scale_factor;
     cmd_vel_stamped.twist.linear.y = hl_constants_.getMAXV() * goal.pose.position.y / scale_factor;
-//    cmd_vel.linear.z = 0;
     cmd_vel_stamped.twist.linear.z = hl_constants_.getMAXV() * goal.pose.position.z / scale_factor;
     cmd_vel_stamped.twist.angular.x = 0;
     cmd_vel_stamped.twist.angular.y = 0;
@@ -276,7 +235,7 @@ void hl_controller::set_velocity(geometry_msgs::PoseStamped& goal)
     goal.pose.position.z -= 2;
 }
 
-void hl_controller::robot_pose_Callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void hl_controller::local_pos_Callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
     current_pose_in_world_frame.pose.position.x = msg->pose.position.x;
     current_pose_in_world_frame.pose.position.y = msg->pose.position.y;
@@ -290,13 +249,20 @@ void hl_controller::robot_pose_Callback(const geometry_msgs::PoseStamped::ConstP
 
 void hl_controller::mode_change_Callback(const std_msgs::String::ConstPtr& msg)
 {
-    std::cout << "YT: receive new flight mode" << std::endl;
-    mode = msg->data;
+    if((msg->data == "tracking") || (msg->data == "landing"))
+    {
+        std::cout << "YT: receive new flight hl_mode" << std::endl;
+        hl_mode = msg->data;
+    }
+    else
+    {
+        std::cout << "YT: invalid hl_mode" << std::endl;
+    }
 }
 
 void hl_controller::state_Callback(const mavros_msgs::State::ConstPtr& msg)
 {
-    current_state = *msg;
+    px4_state = *msg;
 }
 
 
