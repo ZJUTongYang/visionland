@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<launch>
+  <node name="hl_pose_estimator" pkg="hl_pose_estimator" type="hl_pose_estimator_node"/>
+</launch>
