@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<launch>
+  <node name="hl_movetag" pkg="hl_movetag" type="hl_movetag_node"/>
+</launch>
